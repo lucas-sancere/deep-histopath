@@ -39,6 +39,7 @@ TISSUE_LOW_THRESH = 10
 
 ROW_TILE_SIZE = 1024
 COL_TILE_SIZE = 1024
+KeptTilesDivFactor = 100.0
 #NUM_TOP_TILES = tile_summary.high
 
 DISPLAY_TILE_SUMMARY_LABELS = False
@@ -71,6 +72,110 @@ TILE_TEXT_H_BORDER = 4
 
 HSV_PURPLE = 270
 HSV_PINK = 330
+
+""" 
+
+New functions created
+
+"""
+
+def multiprocess_CombineFilt_images_to_tiles(display=False, save_summary=True, save_data=True, save_top_tiles=True, image_num_list=None):
+  """
+  Generate tile summaries and tiles for all training images using multiple processes (one process per core).
+
+  Args:
+    display: If True, display images to screen (multiprocessed display not recommended).
+    save_summary: If True, save tile summary images.
+    save_data: If True, save tile data to csv file.
+    save_top_tiles: If True, save top tiles to files.
+    html: If True, generate HTML page to display tiled images.
+    image_num_list: Optionally specify a list of image slide numbers.
+  """
+  timer = Time()
+  print("Generating tile summaries (multiprocess)\n")
+
+  # how many processes to use
+  num_processes = multiprocessing.cpu_count()
+  pool = multiprocessing.Pool(num_processes)
+
+  if image_num_list is not None:
+    num_train_images = len(image_num_list)
+  else:
+    num_train_images = slideCAFs.get_num_training_slides()
+  if num_processes > num_train_images:
+    num_processes = num_train_images
+  print(num_train_images)
+  images_per_process = num_train_images / num_processes
+
+  print("Number of processes: " + str(num_processes))
+  print("Number of training images: " + str(num_train_images))
+
+  tasks = []
+  for num_process in range(1, num_processes + 1):
+    start_index = (num_process - 1) * images_per_process + 1
+    end_index = num_process * images_per_process
+    start_index = int(start_index)
+    end_index = int(end_index)
+    if image_num_list is not None:
+      sublist = image_num_list[start_index - 1:end_index]
+      tasks.append((sublist, display, save_summary, save_data, save_top_tiles))
+      print("Task #" + str(num_process) + ": Process slides " + str(sublist))
+    else:
+      tasks.append((start_index, end_index, display, save_summary, save_data, save_top_tiles))
+      if start_index == end_index:
+        print("Task #" + str(num_process) + ": Process slide " + str(start_index))
+      else:
+        print("Task #" + str(num_process) + ": Process slides " + str(start_index) + " to " + str(end_index))
+
+  # start tasks
+  results = []
+  for t in tasks:
+    if image_num_list is not None:
+      results.append(pool.apply_async(image_list_to_tiles, t))
+    else:
+      results.append(pool.apply_async(image_range_to_tiles, t))
+
+  print("Time to generate tile previews (multiprocess): %s\n" % str(timer.elapsed()))
+
+
+
+def score_tile(np_tile, tissue_percent, slide_num, row, col):
+  """
+  Score tile based on tissue percentage, color factor, saturation/value factor, and tissue quantity factor.
+
+  Args:
+    np_tile: Tile as NumPy array.
+    tissue_percent: The percentage of the tile judged to be tissue.
+    slide_num: Slide number.
+    row: Tile row.
+    col: Tile column.
+
+  Returns tuple consisting of score, color factor, saturation/value factor, and tissue quantity factor.
+  """
+  #np_tile_norm = filterCAFs.filter_contrast_stretch(np_tile, low=50, high=200)
+  np_tile_norm = np_tile #No normalization for the moment
+  color_factor = hsv_purple_pink_factor(np_tile_norm)
+  s_and_v_factor = hsv_saturation_and_value_factor(np_tile_norm)
+  amount = tissue_quantity(tissue_percent)
+  quantity_factor = tissue_quantity_factor(amount)
+  combined_factor = color_factor * s_and_v_factor * quantity_factor
+  # score = (tissue_percent ** 2) *  np.log(1 + color_factor) / 1000.0
+  # # score = (tissue_percent ** 2) * np.log(1 + combined_factor) / 1000.0
+  # # # scale score to between 0 and 1
+  # score = 1.0 - (10.0 / (10.0 + score))
+  score = tissue_percent
+  return score, color_factor, s_and_v_factor, quantity_factor
+
+
+
+""" 
+
+Old functions modified
+
+"""
+
+
+
 
 
 def get_num_tiles(rows, cols, row_tile_size, col_tile_size):
@@ -204,7 +309,7 @@ def generate_tile_summaries(tile_sum, np_img, display=True, save_summary=False):
     save_tile_summary_on_original_image(summary_orig, slide_num)
 
 
-def generate_top_tile_summaries(tile_sum, np_img, display=True, save_summary=False, show_top_stats=True,
+def generate_top_tile_summaries(tile_sum, np_img, display=True, save_summary=False, show_top_stats=False,
                                 label_all_tiles=LABEL_ALL_TILES_IN_TOP_TILE_SUMMARY,
                                 border_all_tiles=BORDER_ALL_TILES_IN_TOP_TILE_SUMMARY):
   """
@@ -709,31 +814,6 @@ def score_tiles(slide_num, np_img=None, dimensions=None, small_tile_in_tile=Fals
   return tile_sum
 
 
-def score_tile(np_tile, tissue_percent, slide_num, row, col):
-  """
-  Score tile based on tissue percentage, color factor, saturation/value factor, and tissue quantity factor.
-
-  Args:
-    np_tile: Tile as NumPy array.
-    tissue_percent: The percentage of the tile judged to be tissue.
-    slide_num: Slide number.
-    row: Tile row.
-    col: Tile column.
-
-  Returns tuple consisting of score, color factor, saturation/value factor, and tissue quantity factor.
-  """
-  color_factor = hsv_purple_pink_factor(np_tile)
-  s_and_v_factor = hsv_saturation_and_value_factor(np_tile)
-  amount = tissue_quantity(tissue_percent)
-  quantity_factor = tissue_quantity_factor(amount)
-  combined_factor = color_factor * s_and_v_factor * quantity_factor
-  # score = (tissue_percent ** 2) * np.log(1 + color_factor) / 1000.0
-  # # score = (tissue_percent ** 2) * np.log(1 + combined_factor) / 1000.0
-  # # # scale score to between 0 and 1
-  # score = 1.0 - (10.0 / (10.0 + score))
-  score = tissue_percent
-  return score, color_factor, s_and_v_factor, quantity_factor
-
 
 def tissue_quantity_factor(amount):
   """
@@ -816,7 +896,7 @@ def image_range_to_tiles(start_ind, end_ind, display=False, save_summary=True, s
 
 
 def singleprocess_filtered_images_to_tiles(display=False, save_summary=True, save_data=True, save_top_tiles=True,
-                                           html=True, image_num_list=None):
+                                           html=True, image_num_list=None, infos=False):
   """
   Generate tile summaries and tiles for training images using a single process.
 
@@ -1824,7 +1904,7 @@ class TileSummary:
        List of the top-scoring tiles.
     """
     sorted_tiles = self.tiles_by_score()
-    NUM_TOP_TILES = round(self.high / 4.0)
+    NUM_TOP_TILES = round(self.high / KeptTilesDivFactor)
     top_tiles = sorted_tiles[:NUM_TOP_TILES]
     return top_tiles
 
