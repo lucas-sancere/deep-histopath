@@ -171,6 +171,31 @@ def CombineFilt_allimages(save=True, display=False, image_num_list=None):
 
 
 
+def CombineFilt_allimages_singleprocess(save=True, display=False, image_num_list=None):
+  """
+  Apply a set of filters to training images and optionally save and/or display the filtered images.
+
+  Args:
+    save: If True, save filtered images.
+    display: If True, display filtered images to screen.
+    html: If True, generate HTML page to display filtered images.
+    image_num_list: Optionally specify a list of image slide numbers.
+  """
+  t = Time()
+  print("Applying filters to images\n")
+
+  if image_num_list is not None:
+    _, info = apply_CombineFilt_to_image_list(image_num_list)
+  else:
+    num_training_slides = slide.get_num_training_slides()
+    apply_CombineFilt_to_image_range(1, num_training_slides)
+
+  print("Time to apply filters to all images: %s\n" % str(t.elapsed()))
+
+
+
+
+
 def apply_CombineFilt_to_image_list(image_num_list, save, display):
   """
   Apply filters to a list of images.
