@@ -188,7 +188,7 @@ def CombineFilt_allimages_singleprocess(save=True, display=False, image_num_list
     _, info = apply_CombineFilt_to_image_list(image_num_list)
   else:
     num_training_slides = slide.get_num_training_slides()
-    apply_CombineFilt_to_image_range(1, num_training_slides)
+    apply_CombineFilt_to_image_range(1, num_training_slides, save, display)
 
   print("Time to apply filters to all images: %s\n" % str(t.elapsed()))
 

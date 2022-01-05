@@ -28,9 +28,7 @@ import os
 from PIL import Image, ImageDraw, ImageFont
 from enum import Enum
 from deephistopath.wsi import util
-from deephistopath.wsi import filter
 from deephistopath.wsi import filterCAFs
-from deephistopath.wsi import slide
 from deephistopath.wsi import slideCAFs
 from deephistopath.wsi.util import Time
 
@@ -134,6 +132,14 @@ def multiprocess_CombineFilt_images_to_tiles(display=False, save_summary=True, s
       results.append(pool.apply_async(image_list_to_tiles, t))
     else:
       results.append(pool.apply_async(image_range_to_tiles, t))
+
+  slide_nums = list()
+  tile_summaries_dict = dict()
+  for result in results:
+    image_nums, tile_summaries = result.get()
+    slide_nums.extend(image_nums)
+    tile_summaries_dict.update(tile_summaries)
+    print("Done tiling slides: %s" % image_nums)
 
   print("Time to generate tile previews (multiprocess): %s\n" % str(timer.elapsed()))
 
